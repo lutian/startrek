@@ -11,21 +11,21 @@ class startrek(object):
 
     def __init__(self):
 
-        self.w = 1536 #1920
-        self.h = 830 #1080
+        self.w = 1536
+        self.h = 830
 
         # Importo as imagens
-        self.bg_image        = cv2.imread('assets/bg_transporter.jpg', -1)
-        self.char_spock    = cv2.imread('assets/spock.png', -1)
+        self.bg_image     = cv2.imread('assets/bg_transporter.jpg', -1)
+        self.char_spock   = cv2.imread('assets/spock.png', -1)
         self.char_kirk    = cv2.imread('assets/kirk.png', -1)
 
-        self.bg_image        = cv2.resize(self.bg_image, (self.w, self.h))
-
-        self.char_spock    = cv2.resize(self.char_spock, (195, 450))
+        # Se precisar mudo o tamanho da imagens
+        # self.bg_image     = cv2.resize(self.bg_image, (self.w, self.h))
+        self.char_spock   = cv2.resize(self.char_spock, (195, 450))
         self.char_kirk    = cv2.resize(self.char_kirk, (251, 560))
 
-        self.pos_bg         = [[0, self.h], [0, self.w]]
-
+        # Defino a posição das imagens
+        self.pos_bg       = [[0, self.h], [0, self.w]]
         # Defino as posições de cada caracter:
         # Para o plano Y defino a altura da tela - altura do caracter
         # Para o plano X defino uma posição + largura do caracter
@@ -65,72 +65,87 @@ class startrek(object):
 
     def update(self):
         while True:
-
+            # Carrego o fundo
             self.addBackground()
 
+            # Se chamei os characteres para a ponte, carrego o vídeo de fundo com com a transportação
             if self.addParticles == True:
                 ret_particles, self.frame_particles = self.cap_particles.read()
                 if ret_particles == True:
+                    # Carrego o vídeo com a transportação com green screen
                     self.mergeParticles()
                 else:
                     self.transported = True
 
+            # carrego os caracteres
             if self.transported == True:
                 self.addImages()
 
+                # Carrego minha imagem desde a webcam
                 ret, self.frame_front = self.cap_front.read()
                 if ret == True:
                     self.getContoursWebCam()
 
+            # Carrego o timer para dar 3 segundos para se ajeitar para a selfie
             if (self.takePhoto):
                 self.addTimer()
                 if (self.TIMER == 0):
+                    # Capturo a tela
                     self.takeScreenShot()
 
                 if (self.selfieSaved):
+                    # Salvo a foto
                     self.downloadImages()
-                    #self.ftpUploadSelfie()
+                    # Envio via FTP para o server
+                    self.ftpUploadSelfie()
+                    # Gero o QR Code
                     self.genQrCode()
                     self.transported = False
 
+            # Aplico filtros a cena (opcional)
             self.addFilters()
 
+            # Apresento a cena
             cv2.imshow('frame_back', self.frame_back)
 
             key = cv2.waitKey(1)
             if key == ord('z'):
+                # Chamo os characteres para a ponte de transportação
                 self.qrcode = None
                 self.addParticles = True
             if key == ord('f'):
+                # Tiro a foto (começa o tomer de 3 segundos)
                 self.frame_back = None
                 self.qrcode = None
                 self.takePhoto = True
                 self.selfieSaved = False
                 self.TIMER = int(3)
             if key == ord('q'):
+                # Fecho o script
                 cv2.destroyAllWindows()
                 exit(1)
 
     def addTimer(self):
+        # teempo inicial
         if(self.prev == None): self.prev = time.time()
 
         self.frame_timer = self.frame_back.copy()
 
-        #cv2.circle(self.frame_timer, (120, 125), 106, (90, 0, 0), -1) #frame_timer
+        # Coloco um fundo circular para ver melhor o timer (Opcional)
+        #cv2.circle(self.frame_timer, (120, 125), 106, (90, 0, 0), -1) 
         font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(self.frame_timer, str(self.TIMER), #frame_timer
+        cv2.putText(self.frame_timer, str(self.TIMER)
                                 (50, 200), font,
                                 7, (208, 185, 35),
                                 10) #, cv2.LINE_AA
         cv2.imshow('frame_back', self.frame_timer) #
         cv2.waitKey(1)
 
-        # current time
+        # tempo atual
         self.cur = time.time()
 
-        # Update and keep track of Countdown
-        # if time elapsed is one second
-        # than decrease the counter
+        # Resto o tempo atual com o inicial
+        # se for maior ou igual a 1 resto 1 ao timer
         if self.cur-self.prev >= 1:
             self.prev = self.cur
             self.TIMER -= 1
@@ -140,7 +155,6 @@ class startrek(object):
         self.addImage(self.pos_bg, self.bg_image)
 
     def addImages(self):
-
         self.addImageTransparent(self.pos_kirk, self.char_kirk, True)
         self.addImageTransparent(self.pos_spock, self.char_spock, True)
 
@@ -202,8 +216,6 @@ class startrek(object):
         if not isExist:
             os.makedirs(self.image_path)
         cv2.imwrite(self.image_path + "/" + self.image_name + self.image_extension, self.frame_final)
-        #self.ftpUploadSelfie()
-        #self.genQrCode()
 
     def ftpUploadSelfie(self):
         session = ftplib.FTP(str(self.ftp_server),str(self.ftp_user),str(self.ftp_pass))
@@ -239,13 +251,9 @@ class startrek(object):
         meanBlur = cv2.filter2D(src=self.frame_back, kernel=meanBlurKernel, ddepth=-1)
         sharpen = cv2.filter2D(src=self.frame_back, kernel=sharpenKernel, ddepth=-1)
 
-        #cv2.imshow('gaussianBlur', gaussianBlur)
-        #cv2.imshow('meanBlur', meanBlur)
-        #cv2.imshow('sharpen', sharpen)
         self.frame_back = np.concatenate((self.frame_back, gaussianBlur, meanBlur, sharpen), axis=1)
 
     def mergeParticles(self):
-
         self.frame_particles = cv2.resize(self.frame_particles, (self.w, self.h))
 
         u_green = np.array([120, 255, 120])
