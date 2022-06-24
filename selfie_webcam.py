@@ -134,7 +134,7 @@ class startrek(object):
         # Coloco um fundo circular para ver melhor o timer (Opcional)
         #cv2.circle(self.frame_timer, (120, 125), 106, (90, 0, 0), -1) 
         font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(self.frame_timer, str(self.TIMER)
+        cv2.putText(self.frame_timer, str(self.TIMER),
                                 (50, 200), font,
                                 7, (208, 185, 35),
                                 10) #, cv2.LINE_AA
