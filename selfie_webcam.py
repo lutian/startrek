@@ -18,19 +18,22 @@ class startrek(object):
         self.bg_image     = cv2.imread('assets/bg_transporter.jpg', -1)
         self.char_spock   = cv2.imread('assets/spock.png', -1)
         self.char_kirk    = cv2.imread('assets/kirk.png', -1)
+        self.char_khan    = cv2.imread('assets/khan.png', -1)
 
         # Se precisar mudo o tamanho da imagens
         # self.bg_image     = cv2.resize(self.bg_image, (self.w, self.h))
         self.char_spock   = cv2.resize(self.char_spock, (195, 450))
         self.char_kirk    = cv2.resize(self.char_kirk, (251, 560))
+        self.char_khan    = cv2.resize(self.char_khan, (196, 470))
 
         # Defino a posição das imagens
         self.pos_bg       = [[0, self.h], [0, self.w]]
         # Defino as posições de cada caracter:
         # Para o plano Y defino a altura da tela - altura do caracter
         # Para o plano X defino uma posição + largura do caracter
-        self.pos_spock = [[(self.h - 100 - self.char_spock.shape[0]), self.h - 100], [950, (950 + self.char_spock.shape[1])]]
-        self.pos_kirk    = [[(self.h - 60 - self.char_kirk.shape[0]), self.h - 60], [410, (410 + self.char_kirk.shape[1])]]
+        self.pos_spock = [[(self.h - 110 - self.char_spock.shape[0]), self.h - 110], [690, (690 + self.char_spock.shape[1])]]
+        self.pos_kirk    = [[(self.h - 45 - self.char_kirk.shape[0]), self.h - 45], [430, (430 + self.char_kirk.shape[1])]]
+        self.pos_khan    = [[(self.h - 95 - self.char_khan.shape[0]), self.h - 95], [290, (290 + self.char_khan.shape[1])]]
 
         self.qrcode = None
         self.pos_qrcode = [[self.h - 320, self.h - 20], [self.w - 320, self.w - 20]]
@@ -82,9 +85,9 @@ class startrek(object):
                 self.addImages()
 
                 # Carrego minha imagem desde a webcam
-                ret, self.frame_front = self.cap_front.read()
-                if ret == True:
-                    self.getContoursWebCam()
+                #-#ret, self.frame_front = self.cap_front.read()
+                #-#if ret == True:
+                #-#    self.getContoursWebCam()
 
             # Carrego o timer para dar 3 segundos para se ajeitar para a selfie
             if (self.takePhoto):
@@ -115,11 +118,12 @@ class startrek(object):
                 self.addParticles = True
             if key == ord('f'):
                 # Tiro a foto (começa o tomer de 3 segundos)
-                self.frame_back = None
-                self.qrcode = None
-                self.takePhoto = True
-                self.selfieSaved = False
-                self.TIMER = int(3)
+                if self.addParticles == True:
+                    self.frame_back = None
+                    self.qrcode = None
+                    self.takePhoto = True
+                    self.selfieSaved = False
+                    self.TIMER = int(3)
             if key == ord('q'):
                 # Fecho o script
                 cv2.destroyAllWindows()
@@ -157,6 +161,7 @@ class startrek(object):
     def addImages(self):
         self.addImageTransparent(self.pos_kirk, self.char_kirk, True)
         self.addImageTransparent(self.pos_spock, self.char_spock, True)
+        self.addImageTransparent(self.pos_khan, self.char_khan, True)
 
         if (self.qrcode is not None):
             self.addImage(self.pos_qrcode, self.qrcode)
