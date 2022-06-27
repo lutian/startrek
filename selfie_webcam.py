@@ -19,12 +19,14 @@ class startrek(object):
         self.char_spock   = cv2.imread('assets/spock.png', -1)
         self.char_kirk    = cv2.imread('assets/kirk.png', -1)
         self.char_khan    = cv2.imread('assets/khan.png', -1)
+        self.char_fyou    = cv2.imread('assets/fyou.png', -1)
 
         # Se precisar mudo o tamanho da imagens
         # self.bg_image     = cv2.resize(self.bg_image, (self.w, self.h))
         self.char_spock   = cv2.resize(self.char_spock, (195, 450))
         self.char_kirk    = cv2.resize(self.char_kirk, (251, 560))
         self.char_khan    = cv2.resize(self.char_khan, (196, 470))
+        self.char_fyou    = cv2.resize(self.char_fyou, (350, 350))
 
         # Defino a posição das imagens
         self.pos_bg       = [[0, self.h], [0, self.w]]
@@ -32,8 +34,11 @@ class startrek(object):
         # Para o plano Y defino a altura da tela - altura do caracter
         # Para o plano X defino uma posição + largura do caracter
         self.pos_spock = [[(self.h - 110 - self.char_spock.shape[0]), self.h - 110], [690, (690 + self.char_spock.shape[1])]]
-        self.pos_kirk    = [[(self.h - 45 - self.char_kirk.shape[0]), self.h - 45], [430, (430 + self.char_kirk.shape[1])]]
-        self.pos_khan    = [[(self.h - 95 - self.char_khan.shape[0]), self.h - 95], [290, (290 + self.char_khan.shape[1])]]
+        self.pos_kirk  = [[(self.h - 45 - self.char_kirk.shape[0]), self.h - 45], [430, (430 + self.char_kirk.shape[1])]]
+        self.pos_khan  = [[(self.h - 95 - self.char_khan.shape[0]), self.h - 95], [290, (290 + self.char_khan.shape[1])]]
+
+        self.pos_fyou  = [[(int(self.h / 2) - int(self.char_fyou.shape[0] / 2)), (int(self.h / 2) + int(self.char_fyou.shape[0] / 2))], 
+                        [(int(self.w / 2) - int(self.char_fyou.shape[1] / 2)), (int(self.w / 2) + int(self.char_fyou.shape[1] / 2))]] 
 
         self.qrcode = None
         self.pos_qrcode = [[self.h - 320, self.h - 20], [self.w - 320, self.w - 20]]
@@ -64,6 +69,8 @@ class startrek(object):
         self.addParticles = False
         self.transported = False
 
+        self.avoidTakePicture = False
+
         self.update()
 
     def update(self):
@@ -71,39 +78,44 @@ class startrek(object):
             # Carrego o fundo
             self.addBackground()
 
-            # Se chamei os characteres para a ponte, carrego o vídeo de fundo com com a transportação
-            if self.addParticles == True:
-                ret_particles, self.frame_particles = self.cap_particles.read()
-                if ret_particles == True:
-                    # Carrego o vídeo com a transportação com green screen
-                    self.mergeParticles()
-                else:
-                    self.transported = True
+            if self.avoidTakePicture == True:
+                # Usuário está fazendo f*ckyou
+                self.avoidTakeSelfie()
 
-            # carrego os caracteres
-            if self.transported == True:
-                self.addImages()
+            else:
+                # Se chamei os characteres para a ponte, carrego o vídeo de fundo com com a transportação
+                if self.addParticles == True:
+                    ret_particles, self.frame_particles = self.cap_particles.read()
+                    if ret_particles == True:
+                        # Carrego o vídeo com a transportação com green screen
+                        self.mergeParticles()
+                    else:
+                        self.transported = True
 
-                # Carrego minha imagem desde a webcam
-                #-#ret, self.frame_front = self.cap_front.read()
-                #-#if ret == True:
-                #-#    self.getContoursWebCam()
+                # carrego os caracteres
+                if self.transported == True:
+                    self.addImages()
 
-            # Carrego o timer para dar 3 segundos para se ajeitar para a selfie
-            if (self.takePhoto):
-                self.addTimer()
-                if (self.TIMER == 0):
-                    # Capturo a tela
-                    self.takeScreenShot()
+                    # Carrego minha imagem desde a webcam
+                    #-#ret, self.frame_front = self.cap_front.read()
+                    #-#if ret == True:
+                    #-#    self.getContoursWebCam()
 
-                if (self.selfieSaved):
-                    # Salvo a foto
-                    self.downloadImages()
-                    # Envio via FTP para o server
-                    self.ftpUploadSelfie()
-                    # Gero o QR Code
-                    self.genQrCode()
-                    self.transported = False
+                # Carrego o timer para dar 3 segundos para se ajeitar para a selfie
+                if (self.takePhoto):
+                    self.addTimer()
+                    if (self.TIMER == 0):
+                        # Capturo a tela
+                        self.takeScreenShot()
+
+                    if (self.selfieSaved):
+                        # Salvo a foto
+                        self.downloadImages()
+                        # Envio via FTP para o server
+                        self.ftpUploadSelfie()
+                        # Gero o QR Code
+                        self.genQrCode()
+                        self.transported = False
 
             # Aplico filtros a cena (opcional)
             self.addFilters()
@@ -112,10 +124,15 @@ class startrek(object):
             cv2.imshow('frame_back', self.frame_back)
 
             key = cv2.waitKey(1)
+            if key == ord('c'):
+                self.avoidTakePicture = True
+                self.qrcode = None
+                self.addParticles = False
             if key == ord('z'):
                 # Chamo os characteres para a ponte de transportação
                 self.qrcode = None
                 self.addParticles = True
+                self.avoidTakePicture = False
             if key == ord('f'):
                 # Tiro a foto (começa o tomer de 3 segundos)
                 if self.addParticles == True:
@@ -294,6 +311,9 @@ class startrek(object):
 
         f = self.frame_webcam - res
         self.frame_back = np.where(f == 0, self.frame_back, f)
+
+    def avoidTakeSelfie(self):
+        self.addImageTransparent(self.pos_fyou, self.char_fyou)
 
 if __name__ == '__main__':
     selfie_with_startrek = startrek()
