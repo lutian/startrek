@@ -23,7 +23,7 @@ class startrek(object):
         self.char_fyou    = cv2.imread('assets/fyou.png', -1)
 
         # Se precisar mudo o tamanho da imagens
-        # self.bg_image     = cv2.resize(self.bg_image, (self.w, self.h))
+        self.bg_image     = cv2.resize(self.bg_image, (self.w, self.h))
         self.char_spock   = cv2.resize(self.char_spock, (195, 450))
         self.char_kirk    = cv2.resize(self.char_kirk, (251, 560))
         self.char_khan    = cv2.resize(self.char_khan, (196, 470))
@@ -38,26 +38,31 @@ class startrek(object):
         self.pos_kirk  = [[(self.h - 45 - self.char_kirk.shape[0]), self.h - 45], [430, (430 + self.char_kirk.shape[1])]]
         self.pos_khan  = [[(self.h - 95 - self.char_khan.shape[0]), self.h - 95], [290, (290 + self.char_khan.shape[1])]]
 
-        self.pos_fyou  = [[((self.h / 2) - (self.char_fyou.shape[0] / 2)), ((self.h / 2) + (self.char_fyou.shape[0] / 2))], 
-                        [((self.w / 2) - (self.char_fyou.shape[1] / 2)), ((self.w / 2) + (self.char_fyou.shape[1] / 2))]]
+        self.pos_fyou  = [[(int(self.h / 2) - int(self.char_fyou.shape[0] / 2)), (int(self.h / 2) + int(self.char_fyou.shape[0] / 2))], 
+                        [(int(self.w / 2) - int(self.char_fyou.shape[1] / 2)), (int(self.w / 2) + int(self.char_fyou.shape[1] / 2))]]
 
         self.qrcode = None
         self.pos_qrcode = [[self.h - 320, self.h - 20], [self.w - 320, self.w - 20]]
 
         self.frame_webcam = np.ones((self.h,self.w,3),dtype='uint8')*0
         self.frame_final = None
+        
+        self.frame_saved = None
         self.image_path = 'temp'
         self.image_name = None
         self.image_extension = '.jpg'
         self.takePhoto = False
 
+        # Apply selfie segmentation
+        self.mp_holistic = mp.solutions.holistic
+
         # FTP account
-        self.url = 'https://your.domain/?im='
-        self.ftp_server = 'ftp.your.domain'
-        self.ftp_user = 'user@your.domain'
+        self.url = 'https://your.server.com/?im='
+        self.ftp_server = 'ftp.your.server.com'
+        self.ftp_user = 'user@your.server.com'
         self.ftp_pass = 'password'
 
-        self.TIMER = int(3)
+        self.TIMER = None
         self.prev = None
         self.cur = None
         self.frame_timer = None
@@ -65,10 +70,12 @@ class startrek(object):
 
         self.cap_front = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.frame_front = None
+        self.frame_back = np.ones((self.h,self.w,3),dtype='uint8')*255
 
         self.cap_particles = cv2.VideoCapture("assets/startrek.mp4")
         self.addParticles = False
         self.transported = False
+        self.avoidTakePicture = False
 
         self.WRIST = 0
         self.THUMB_IP = 3
@@ -104,22 +111,25 @@ class startrek(object):
                 # Carrego o fundo
                 self.addBackground()
 
-                if self.capture_front.isOpened():
+                if self.cap_front.isOpened():
                     # Read frame
-                    (self.status_front, self.frame_front) = self.capture_front.read()
+                    (self.status_front, self.frame_front) = self.cap_front.read()
                     
                     if (self.status_front == False):
                         break
 
                     # Atualizo as dimensões do vídeo de acordo com a imagem de fundo
+                    self.frame_front = cv2.resize(self.frame_front, (1000,750), interpolation = cv2.INTER_AREA)
                     ycenter = int(self.h / 2)
-                    y1 = ycenter - int(self.frame_front.shape[0] / 2) 
-                    y2 = ycenter + int(self.frame_front.shape[0] / 2)
+                    y1 = int(self.h - self.frame_front.shape[0]) #ycenter - int(self.frame_front.shape[0] / 2) 
+                    y2 = self.h #ycenter + int(self.frame_front.shape[0] / 2)
                     xcenter = int(self.w / 2)
                     x1 = xcenter - int(self.frame_front.shape[1] / 2) 
                     x2 = xcenter + int(self.frame_front.shape[1] / 2)
                     self.frame_front = cv2.flip(self.frame_front,1)
                     self.frame_webcam[y1:y2,x1:x2] = self.frame_front
+
+                    #self.frame_webcam = cv2.resize(self.frame_front, (self.w,self.h), interpolation = cv2.INTER_AREA)
 
                     # Transformo do BGR para RGB
                     self.frame_front_rgb = cv2.cvtColor(self.frame_webcam, cv2.COLOR_BGR2RGB)
@@ -129,40 +139,55 @@ class startrek(object):
                     _, frame_front_th = cv2.threshold(results.segmentation_mask, 0.75, 255, cv2.THRESH_BINARY)
 
                     # Converto o data type
-                    frame_front_th = frame_front_th.astype(np.uint8)
+                    frame_front_th_invert = None
+                    if (frame_front_th is not None):
+                        frame_front_th = frame_front_th.astype(np.uint8)
 
-                    # Aplico o blur
-                    # frame_front_th = cv2.medianBlur(frame_front_th, 13)
-                    # Invirto a mascara
+                        # Aplico o blur
+                        #frame_front_th = cv2.medianBlur(frame_front_th, 7)
+                        # Invirto a mascara
                     frame_front_th_invert = cv2.bitwise_not(frame_front_th)
 
                     # TODO: validar se a pessoa dá um like, nesse caso aparecem os famosos e tira uma foto
-                    if results.right_hand_landmarks:
-                        print(
-                            f'Right Hand coordinates: ('
-                            f'{results.right_hand_landmarks.landmark}, '
-                        )
-                        if (self.isFYouSignal(results.right_hand_landmarks.landmark)):
+                    if results.left_hand_landmarks:
+                        #print(
+                        #    f'Right Hand coordinates: ('
+                        #    f'{results.left_hand_landmarks.landmark}, '
+                        #)
+                        if (self.isFYouSignal(results.left_hand_landmarks.landmark)):
                             # Usuário está fazendo f*ckyou
                             self.avoidTakePicture = True
                             self.qrcode = None
                             self.addParticles = False
+                            print('Dont fack me!')
+                        else:
+                            self.avoidTakePicture = False
 
-                        if (self.isStarTrekSignal(results.right_hand_landmarks.landmark)):
+                        if (self.isTwoSignal(results.left_hand_landmarks.landmark)):
+                            self.transported = False
+                            self.addParticles = False
+                            self.qrcode = None
+                            self.takePhoto = False
+                            print('Restart')
+
+
+                        if (self.isStarTrekSignal(results.left_hand_landmarks.landmark)):
                             # usuário fez a saudação de star trek (_\\//)
+                            self.transported = False
                             self.addParticles = True
-                            self.qrcode = None
+                            #self.qrcode = None
+                            self.takePhoto = False
+                            print('Wellcome')
 
-                        if (self.isLike(results.right_hand_landmarks.landmark) and self.addParticles):
-                            self.frame_back = None
-                            self.qrcode = None
+                        if (self.isLike(results.left_hand_landmarks.landmark) and self.transported and self.TIMER is None):
+                            #self.frame_back = None
+                            #self.qrcode = None
                             self.takePhoto = True
                             self.selfieSaved = False
                             self.TIMER = int(3)
+                            print('Take the fuckin selfie!')
 
-                    if self.avoidTakePicture == True:
-                        self.avoidTakeSelfie()
-                    else:
+                    if self.avoidTakePicture == False:
                         # Se chamei os characteres para a ponte, carrego o vídeo de fundo com a transportação
                         if self.addParticles == True:
                             ret_particles, self.frame_particles = self.cap_particles.read()
@@ -192,9 +217,6 @@ class startrek(object):
                                 self.genQrCode()
                                 self.transported = False
 
-                    # Aplico filtros a cena (opcional)
-                    self.addFilters()
-
                     # Obtenho a cena do fundo
                     frame_bg = cv2.bitwise_and(self.frame_back, self.frame_back, mask=frame_front_th_invert)
 
@@ -203,6 +225,12 @@ class startrek(object):
 
                     # junto o Background com o Foreground
                     self.frame_final = cv2.add(frame_bg, frame_fg)
+
+                    # Aplico filtros a cena (opcional)
+                    #self.addFilters()
+
+                    if self.avoidTakePicture == True:
+                        self.avoidTakeSelfie()
 
                     cv2.imshow('frame_final', self.frame_final)
 
@@ -214,7 +242,7 @@ class startrek(object):
                     if key == ord('f'):
                         # Tiro a foto (começa o tomer de 3 segundos)
                         if self.addParticles == True:
-                            self.frame_back = None
+                            #self.frame_back = None
                             self.qrcode = None
                             self.takePhoto = True
                             self.selfieSaved = False
@@ -222,13 +250,13 @@ class startrek(object):
                     if key == ord('q'):
                         # Fecho o script
                         cv2.destroyAllWindows()
-                        exit(1)
+                        exit(10)
 
     def addTimer(self):
         # teempo inicial
         if(self.prev == None): self.prev = time.time()
 
-        self.frame_timer = self.frame_back.copy()
+        self.frame_timer = self.frame_final.copy()
 
         # Coloco um fundo circular para ver melhor o timer (Opcional)
         #cv2.circle(self.frame_timer, (120, 125), 106, (90, 0, 0), -1) 
@@ -237,7 +265,7 @@ class startrek(object):
                                 (50, 200), font,
                                 7, (208, 185, 35),
                                 10) #, cv2.LINE_AA
-        cv2.imshow('frame_back', self.frame_timer) #
+        cv2.imshow('frame_final', self.frame_timer) #
         cv2.waitKey(1)
 
         # tempo atual
@@ -305,11 +333,11 @@ class startrek(object):
         Returns:
             boolean check if hand is in Like mode
          """
-        return points[self.THUMB_TIP].x > points[self.THUMB_IP].x \
-            and points[self.INDEX_FINGER_TIP].y > points[self.INDEX_FINGER_DIP].y \
-            and points[self.MIDDLE_FINGER_TIP].y > points[self.MIDDLE_FINGER_DIP].y \
-            and points[self.RING_FINGER_TIP].y > points[self.RING_FINGER_DIP].y \
-             and points[self.PINKY_TIP].y > points[self.PINKY_DIP].y
+        return points[self.THUMB_TIP].x < points[self.THUMB_IP].x \
+            and points[self.INDEX_FINGER_TIP].y < points[self.INDEX_FINGER_PIP].y \
+            and points[self.MIDDLE_FINGER_TIP].y < points[self.MIDDLE_FINGER_PIP].y \
+            and points[self.RING_FINGER_TIP].y < points[self.RING_FINGER_PIP].y \
+             and points[self.PINKY_TIP].y < points[self.PINKY_PIP].y
             
     def isFistClosed(self, points):
         """
@@ -414,17 +442,18 @@ class startrek(object):
         self.image_name = 'startrek_' + "".join(temp)
 
     def takeScreenShot(self):
-        self.frame_final = self.frame_back.copy()
-        cv2.rectangle(self.frame_back, (1, 1), (self.frame_back.shape[1]-1, self.frame_back.shape[0]-1), (255, 255, 255), -1)
+        self.frame_saved = self.frame_final.copy()
+        cv2.rectangle(self.frame_final, (1, 1), (self.frame_final.shape[1]-1, self.frame_final.shape[0]-1), (255, 255, 255), -1)
         self.getImageName()
         self.selfieSaved = True
+        self.TIMER = None
 
     def downloadImages(self):
         # Check whether the specified path exists or not
         isExist = os.path.exists(self.image_path)
         if not isExist:
             os.makedirs(self.image_path)
-        cv2.imwrite(self.image_path + "/" + self.image_name + self.image_extension, self.frame_final)
+        cv2.imwrite(self.image_path + "/" + self.image_name + self.image_extension, self.frame_saved)
 
     def ftpUploadSelfie(self):
         session = ftplib.FTP(str(self.ftp_server),str(self.ftp_user),str(self.ftp_pass))
@@ -456,11 +485,11 @@ class startrek(object):
         sharpenKernel = np.array(([[0, -1, 0], [-1, 9, -1], [0, -1, 0]]), np.float32)/9
         meanBlurKernel = np.ones((3, 3), np.float32)/9
 
-        gaussianBlur = cv2.filter2D(src=self.frame_back, kernel=gaussianBlurKernel, ddepth=-1)
-        meanBlur = cv2.filter2D(src=self.frame_back, kernel=meanBlurKernel, ddepth=-1)
-        sharpen = cv2.filter2D(src=self.frame_back, kernel=sharpenKernel, ddepth=-1)
+        gaussianBlur = cv2.filter2D(src=self.frame_final, kernel=gaussianBlurKernel, ddepth=-1)
+        meanBlur = cv2.filter2D(src=self.frame_final, kernel=meanBlurKernel, ddepth=-1)
+        sharpen = cv2.filter2D(src=self.frame_final, kernel=sharpenKernel, ddepth=-1)
 
-        self.frame_back = np.concatenate((self.frame_back, gaussianBlur, meanBlur, sharpen), axis=1)
+        self.frame_final = np.concatenate((self.frame_final, gaussianBlur, meanBlur, sharpen), axis=1)
 
     def mergeParticles(self):
         self.frame_particles = cv2.resize(self.frame_particles, (self.w, self.h))
@@ -478,7 +507,8 @@ class startrek(object):
         #cv2.imshow("mask", f)
 
     def avoidTakeSelfie(self):
-        self.addImageTransparent(self.pos_fyou, self.char_fyou, True)
+        self.frame_final[self.pos_fyou[0][0]:self.pos_fyou[0][1], self.pos_fyou[1][0]:self.pos_fyou[1][1]] = self.blendTransparent(
+            self.frame_final[self.pos_fyou[0][0]:self.pos_fyou[0][1], self.pos_fyou[1][0]:self.pos_fyou[1][1]], self.char_fyou)
 
 if __name__ == '__main__':
     selfie_with_startrek = startrek()
